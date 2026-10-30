@@ -1,0 +1,20 @@
+{
+  "title": "Marketing plan review",
+  "create_time": 1761800000.5,
+  "update_time": 1761803600.1,
+  "conversation_id": "0b8e9c3a-1111-4222-8333-944455556666",
+  "default_model_slug": "gpt-5",
+  "current_node": "m7",
+  "mapping": {
+    "root": { "id": "root", "message": null, "parent": null, "children": ["m0"] },
+    "m0": { "id": "m0", "parent": "root", "children": ["m1"], "message": { "id": "m0", "author": { "role": "system" }, "content": { "content_type": "text", "parts": [""] }, "metadata": { "is_visually_hidden_from_conversation": true } } },
+    "m1": { "id": "m1", "parent": "m0", "children": ["m2a", "m2"], "message": { "id": "m1", "author": { "role": "user" }, "create_time": 1761800001, "content": { "content_type": "multimodal_text", "parts": [ { "content_type": "image_asset_pointer", "asset_pointer": "file-service://file-IMG1", "width": 800, "height": 600 }, "Here is our plan and a photo of the whiteboard. Can you review it?" ] }, "metadata": { "attachments": [ { "id": "file-PDF1", "name": "Q4 plan.pdf", "mime_type": "application/pdf" }, { "id": "file-IMG1", "name": "whiteboard.jpg", "mime_type": "image/jpeg" } ] } } },
+    "m2a": { "id": "m2a", "parent": "m1", "children": [], "message": { "id": "m2a", "author": { "role": "assistant" }, "content": { "content_type": "text", "parts": ["Old regenerated answer."] }, "metadata": {} } },
+    "m2": { "id": "m2", "parent": "m1", "children": ["m3"], "message": { "id": "m2", "author": { "role": "assistant" }, "content": { "content_type": "thoughts", "thoughts": [] }, "metadata": {} } },
+    "m3": { "id": "m3", "parent": "m2", "children": ["m4"], "message": { "id": "m3", "author": { "role": "assistant" }, "content": { "content_type": "text", "parts": ["The plan is solid. Budgets grew 12% last yearciteturn0search0 and peers are doing the same 【4†source】.\n\nI made a chart: [Download chart](sandbox:/mnt/data/chart.png) and an old one [here](sandbox:/mnt/data/old.csv)."] }, "metadata": { "model_slug": "gpt-5", "content_references": [ { "matched_text": "citeturn0search0", "items": [ { "url": "https://example.com/budgets", "title": "Budget report 2025" } ] } ], "citations": [ { "metadata": { "url": "https://example.org/peers", "title": "Peer study" } } ] } } },
+    "m4": { "id": "m4", "parent": "m3", "children": ["m5"], "message": { "id": "m4", "author": { "role": "assistant" }, "recipient": "canmore.create_textdoc", "content": { "content_type": "code", "language": "json", "text": "{\"name\": \"Launch email\", \"type\": \"document\", \"content\": \"Subject: We're live\\n\\nHello team...\"}" }, "metadata": {} } },
+    "m5": { "id": "m5", "parent": "m4", "children": ["m6"], "message": { "id": "m5", "author": { "role": "user" }, "content": { "content_type": "text", "parts": ["Great. Make a banner image."] }, "metadata": {} } },
+    "m6": { "id": "m6", "parent": "m5", "children": ["m7"], "message": { "id": "m6", "author": { "role": "tool", "name": "t2uay3k.sj1i4kz" }, "content": { "content_type": "multimodal_text", "parts": [ { "content_type": "image_asset_pointer", "asset_pointer": "sediment://file_GEN1", "metadata": { "dalle": { "prompt": "banner" } } } ] }, "metadata": {} } },
+    "m7": { "id": "m7", "parent": "m6", "children": [], "message": { "id": "m7", "author": { "role": "assistant" }, "content": { "content_type": "code", "language": "python", "text": "print('hello')" }, "metadata": { "model_slug": "gpt-5" } } }
+  }
+}
