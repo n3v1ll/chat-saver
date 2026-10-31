@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chat Saver</title>
+  <style>
+    body { font: 13px/1.4 system-ui, sans-serif; margin: 0; padding: 14px; width: 360px; color: #202123; }
+    h1 { font-size: 15px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; }
+    h1 a { font-size: 12px; font-weight: 400; color: #10a37f; }
+    p { margin: 0 0 10px; color: #555; }
+    button { padding: 7px 12px; border: 0; border-radius: 8px; background: #10a37f; color: #fff; font: 600 13px system-ui; cursor: pointer; }
+    button.secondary { background: #eee; color: #202123; }
+    button:disabled { opacity: .5; cursor: default; }
+    #filter { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ccc; border-radius: 8px; margin: 8px 0 6px; font: inherit; }
+    #list { max-height: 300px; overflow: auto; border: 1px solid #eee; border-radius: 8px; }
+    #list label { display: flex; gap: 8px; padding: 6px 8px; border-bottom: 1px solid #f2f2f2; cursor: pointer; }
+    #list label:hover { background: #f7f7f8; }
+    #list .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #list .d { color: #888; font-size: 11px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .row .grow { flex: 1; }
+    #msg { color: #b00020; margin-top: 8px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Chat Saver <a href="#" id="settings">Settings</a></h1>
+  <p>To save the chat you're in, use the green <b>Save chat</b> button on the page. To save several chats into one ZIP, pick them here.</p>
+  <button id="load">Show my chats</button>
+  <div id="picker" class="hidden">
+    <input id="filter" type="search" placeholder="Filter by title">
+    <div id="list"></div>
+    <div class="row">
+      <label><input type="checkbox" id="all"> Select all shown</label>
+      <span class="grow"></span>
+      <button id="more" class="secondary">Load more</button>
+    </div>
+    <div class="row">
+      <label class="grow"><input type="checkbox" id="summary"> AI summary for each chat</label>
+      <button id="save" disabled>Save 0 chats</button>
+    </div>
+  </div>
+  <div id="msg"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -55,8 +55,13 @@
    */
   async function exportConversation(conv, deps) {
     const progress = deps.onProgress || (() => {});
-    const zip = new deps.JSZip();
-    const folder = C.folderName(conv);
+    // In bulk mode several chats share one zip; deps.usedFolders keeps their folder names unique.
+    const zip = deps.zip || new deps.JSZip();
+    let folder = C.folderName(conv);
+    if (deps.usedFolders) {
+      for (let i = 2; deps.usedFolders.has(folder); i++) folder = `${C.folderName(conv)}-${i}`;
+      deps.usedFolders.add(folder);
+    }
     const dir = zip.folder(folder);
     const used = new Set();
     const fileIndex = new Map();
@@ -125,6 +130,10 @@
     const report = {
       title: conv.title,
       conversationId: conv.conversation_id || conv.id,
+      folder,
+      created: C.isoDate(conv.create_time),
+      updated: C.isoDate(conv.update_time),
+      model: conv.default_model_slug || null,
       exportedAt: new Date().toISOString(),
       filesSaved: saved.length,
       filesFailed: failed.map((f) => ({ name: f.name || f.sandboxPath || f.id, error: f.error })),
@@ -134,7 +143,29 @@
     return { zip, folder, report };
   }
 
-  const api = { exportConversation, extFor };
+  // Top-level index for a ZIP holding many chats. Rows: reports from exportConversation, or { title, error }.
+  function indexMarkdown(reports) {
+    const ok = reports.filter((r) => !r.error);
+    const bad = reports.filter((r) => r.error);
+    const cell = (t) => String(t || 'Untitled').replace(/\|/g, '\\|').replace(/[[\]]/g, '');
+    const lines = ['# Saved ChatGPT chats', '', `${ok.length} chat(s) saved on ${new Date().toISOString().slice(0, 10)}.`, ''];
+    if (ok.length) {
+      lines.push('| Chat | Started | Last updated | Files | AI summary |', '| --- | --- | --- | --- | --- |');
+      const sorted = [...ok].sort((a, b) => String(b.updated).localeCompare(String(a.updated)));
+      for (const r of sorted) {
+        lines.push(`| [${cell(r.title)}](${encodeURI(r.folder)}/README.md) | ${r.created || ''} | ${r.updated || ''} | ${r.filesSaved}${r.filesFailed.length ? ` (${r.filesFailed.length} missing)` : ''} | ${r.aiSummary === 'included' ? 'yes' : 'no'} |`);
+      }
+      lines.push('');
+    }
+    if (bad.length) {
+      lines.push('## Chats that could not be saved', '');
+      for (const r of bad) lines.push(`- ${cell(r.title)}: ${r.error}`);
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  const api = { exportConversation, extFor, indexMarkdown };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ChatSaver = Object.assign(root.ChatSaver || {}, api);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

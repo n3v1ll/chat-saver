@@ -87,32 +87,113 @@
     return (Array.isArray(docs) ? docs : []).map((d) => ({ title: d.title, textdoc_type: d.textdoc_type, content: d.content }));
   }
 
-  async function saveCurrentChat(setStatus) {
-    const convId = conversationIdFromUrl();
-    if (!convId) throw new Error('Open a chat first.');
-    setStatus('Reading chat');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Retry on rate limiting with growing waits, so bulk saves never hammer ChatGPT.
+  async function withBackoff(fn, setStatus) {
+    for (let wait = 10000; ; wait *= 2) {
+      try {
+        return await fn();
+      } catch (err) {
+        if (!/ 429 /.test(String(err.message)) || wait > 80000) throw err;
+        setStatus(`ChatGPT asked us to slow down, waiting ${wait / 1000}s`);
+        await sleep(wait);
+      }
+    }
+  }
+
+  async function exportOne(convId, opts) {
     const conv = await api(`/backend-api/conversation/${convId}`);
     conv.conversation_id = conv.conversation_id || convId;
-
-    const { zip, folder, report } = await CS.exportConversation(conv, {
+    return CS.exportConversation(conv, {
       JSZip,
+      zip: opts.zip,
+      usedFolders: opts.usedFolders,
       downloadFile: (ref) => downloadFile(convId, ref),
       fetchTextdocs: () => fetchTextdocs(convId),
-      summarize: (title, transcript) => sendToBackground({ type: 'summarize', title, transcript }),
-      onProgress: setStatus,
+      summarize: opts.withSummary === false ? null : (title, transcript) => sendToBackground({ type: 'summarize', title, transcript }),
+      onProgress: opts.onProgress,
     });
+  }
 
+  async function downloadZip(zip, name) {
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${folder}.zip`;
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  async function saveCurrentChat(setStatus) {
+    const convId = conversationIdFromUrl();
+    if (!convId) throw new Error('Open a chat first.');
+    setStatus('Reading chat');
+    const { zip, folder, report } = await exportOne(convId, { onProgress: setStatus });
+    await downloadZip(zip, `${folder}.zip`);
     return report;
   }
+
+  // Several chats into one ZIP with an index.md at the top.
+  async function saveManyChats(items, withSummary, setStatus) {
+    const zip = new JSZip();
+    const usedFolders = new Set();
+    const reports = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const prefix = `Chat ${i + 1}/${items.length}`;
+      setStatus(prefix);
+      try {
+        const { report } = await withBackoff(() => exportOne(item.id, {
+          zip, usedFolders, withSummary, onProgress: (t) => setStatus(`${prefix}: ${t}`),
+        }), setStatus);
+        reports.push(report);
+      } catch (err) {
+        reports.push({ title: item.title, error: String(err.message || err) });
+      }
+      if (i < items.length - 1) await sleep(1500); // pace requests like a person clicking through
+    }
+    zip.file('index.md', CS.indexMarkdown(reports));
+    zip.file('index.json', JSON.stringify(reports, null, 2));
+    setStatus('Building ZIP');
+    await downloadZip(zip, `chatgpt-chats_${new Date().toISOString().slice(0, 10)}.zip`);
+    return reports;
+  }
+
+  async function listConversations(offset) {
+    const page = await api(`/backend-api/conversations?offset=${offset || 0}&limit=50&order=updated`);
+    return {
+      items: (page.items || []).map((c) => ({ id: c.id, title: c.title, updated: CS.isoDate(c.update_time) })),
+      total: page.total,
+    };
+  }
+
+  let busy = false;
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'listConversations') {
+      listConversations(msg.offset).then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e) }));
+      return true;
+    }
+    if (msg.type === 'saveMany') {
+      if (busy) {
+        sendResponse({ ok: false, error: 'A save is already running in this tab.' });
+        return false;
+      }
+      busy = true;
+      sendResponse({ ok: true }); // the popup may close; progress shows in the page
+      saveManyChats(msg.items, msg.withSummary, (t) => toast(`<b>Chat Saver</b><br>${escapeHtml(t)}`))
+        .then((reports) => {
+          const failed = reports.filter((r) => r.error).length;
+          toast(`<b>Saved ${reports.length - failed} chat(s).</b>${failed ? ` ${failed} failed, see index.md.` : ''}`, 15000);
+        }, (err) => toast(`<b>Bulk save failed.</b><br>${escapeHtml(err.message || err)}`, 15000))
+        .finally(() => { busy = false; });
+      return false;
+    }
+    return false;
+  });
 
   // ---- UI ----
   const style = document.createElement('style');

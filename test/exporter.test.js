@@ -87,3 +87,15 @@ test('builds provider requests', () => {
   assert.strictEqual(a.init.headers['x-api-key'], 'k');
   assert.strictEqual(a.extract({ content: [{ type: 'text', text: 'y' }] }), 'y');
 });
+
+test('bulk mode shares one zip, keeps folder names unique and builds an index', async () => {
+  const { exportConversation: run, indexMarkdown } = require('../src/exporter.js');
+  const zip = new JSZip();
+  const usedFolders = new Set();
+  const a = await run(conv, { JSZip, zip, usedFolders, downloadFile: fakeDownload });
+  const b = await run(conv, { JSZip, zip, usedFolders, downloadFile: fakeDownload });
+  assert.deepStrictEqual([a.report.folder, b.report.folder], ['2025-10-30_marketing-plan-review', '2025-10-30_marketing-plan-review-2']);
+  const md = indexMarkdown([a.report, { title: 'Bad | chat', error: 'HTTP 404' }]);
+  assert.match(md, /\[Marketing plan review\]\(2025-10-30_marketing-plan-review\/README\.md\)/);
+  assert.match(md, /Bad \\\| chat: HTTP 404/);
+});
