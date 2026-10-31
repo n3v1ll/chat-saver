@@ -26,6 +26,11 @@ Everything runs in your browser. Nothing is sent anywhere except the AI summary 
 4. Click the Chat Saver icon in the toolbar, choose OpenAI or Anthropic, paste your API key and click **Save settings**. Skip this if you don't want the AI summary.
 5. Open a chat on chatgpt.com and click **Save chat** (green button, bottom right).
 
+## Saving many chats
+
+- **From ChatGPT:** click the Chat Saver toolbar icon, then **Show my chats**. Tick the ones you want (filter, select all, load more) and click **Save**. You get one ZIP with a folder per chat plus `index.md` and `index.json` listing them all. Progress shows on the ChatGPT page.
+- **From the official export:** request it in ChatGPT (Settings, Data controls, Export data). Then open the toolbar icon, click **Import it here** and pick the ZIP from the email. This works offline and makes the same folders. ChatGPT's export leaves out Code Interpreter files, so the index lists those as missing.
+
 ## How it works
 
 - `src/content.js` runs on chatgpt.com. When you click Save, it reads your session from the page and calls the same internal endpoints the ChatGPT web app uses (`/backend-api/conversation/{id}`, `/backend-api/files/download/{id}`, the Code Interpreter download endpoint and `/textdocs` for canvas).
@@ -38,7 +43,8 @@ These endpoints are not a public API and can change without notice. When somethi
 ## Known limits
 
 - Code Interpreter files (`sandbox:/mnt/data/...`) are deleted by ChatGPT about an hour after the chat goes idle. Older ones are marked "expired" instead of saved.
-- One chat at a time. Bulk export and importing the official ChatGPT data export are planned next.
+- Chats inside ChatGPT Projects don't show in the bulk list yet. Open them and use **Save chat**.
+- Very large official exports (several GB) may run out of browser memory. Import a filtered set of chats if so.
 - Voice audio is not saved.
 
 ## Development

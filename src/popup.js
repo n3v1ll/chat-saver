@@ -70,6 +70,11 @@ $('settings').addEventListener('click', (e) => {
   chrome.runtime.openOptionsPage();
 });
 
+$('import').addEventListener('click', (e) => {
+  e.preventDefault();
+  chrome.tabs.create({ url: chrome.runtime.getURL('src/import.html') });
+});
+
 $('load').addEventListener('click', async () => {
   tabId = await activeChatGptTab();
   if (!tabId) return showError('Open chatgpt.com in this tab first.');

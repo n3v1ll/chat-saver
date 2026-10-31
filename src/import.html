@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Import ChatGPT export · Chat Saver</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 24px; max-width: 720px; color: #202123; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p { color: #555; margin: 0 0 14px; }
+    button { padding: 8px 14px; border: 0; border-radius: 8px; background: #10a37f; color: #fff; font: 600 14px system-ui; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    #filter { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; border-radius: 8px; margin: 12px 0 6px; font: inherit; }
+    #list { max-height: 50vh; overflow: auto; border: 1px solid #eee; border-radius: 8px; }
+    #list label { display: flex; gap: 8px; padding: 6px 10px; border-bottom: 1px solid #f2f2f2; cursor: pointer; }
+    #list .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #list .d { color: #888; font-size: 12px; }
+    .row { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
+    .grow { flex: 1; }
+    #status { margin-top: 12px; color: #10a37f; }
+    #error { margin-top: 12px; color: #b00020; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Import your ChatGPT data export</h1>
+  <p>In ChatGPT, go to Settings, Data controls, Export data. When the email arrives, download the ZIP and pick it below. It is read only in this browser and turned into the same folders as <b>Save chat</b>, with a searchable index.</p>
+  <input type="file" id="file" accept=".zip,application/zip">
+  <div id="picker" class="hidden">
+    <input id="filter" type="search" placeholder="Filter by title">
+    <div id="list"></div>
+    <div class="row">
+      <label><input type="checkbox" id="all" checked> Select all shown</label>
+      <span class="grow"></span>
+      <label><input type="checkbox" id="summary"> AI summary for each chat</label>
+      <button id="build" disabled>Build archive</button>
+    </div>
+  </div>
+  <div id="status"></div>
+  <div id="error"></div>
+  <script src="../vendor/jszip.min.js"></script>
+  <script src="convert.js"></script>
+  <script src="exporter.js"></script>
+  <script src="import-core.js"></script>
+  <script src="import.js"></script>
+</body>
+</html>

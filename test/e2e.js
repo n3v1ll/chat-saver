@@ -61,5 +61,22 @@ const ID = conv.conversation_id;
   console.log('bulk top-level:', Object.keys(bzip.files).filter((p) => !p.includes('/') || p.split('/').length === 2 && p.endsWith('/')).join(', '));
   console.log(await bzip.file('index.md').async('string'));
   console.log('bulk toast:', await page.locator('#chat-saver-toast').innerText());
+
+  // Import page: feed it a small fake official export.
+  const src = new JSZip();
+  src.file('conversations.json', JSON.stringify([conv]));
+  src.file('file-PDF1-Q4 plan.pdf', 'pdf');
+  const exportPath = path.join(require('os').tmpdir(), 'fake-chatgpt-export.zip');
+  fs.writeFileSync(exportPath, await src.generateAsync({ type: 'nodebuffer' }));
+  const extId = new URL(sw.url()).host;
+  const imp = await ctx.newPage();
+  await imp.goto(`chrome-extension://${extId}/src/import.html`);
+  await imp.setInputFiles('#file', exportPath);
+  await imp.locator('#build:not([disabled])').waitFor({ timeout: 10000 });
+  console.log('import status:', await imp.locator('#status').innerText());
+  const [idl] = await Promise.all([imp.waitForEvent('download', { timeout: 30000 }), imp.click('#build')]);
+  const izip = await JSZip.loadAsync(fs.readFileSync(await idl.path()));
+  console.log('import zip:', idl.suggestedFilename(), Object.keys(izip.files).filter((n) => !n.endsWith('/')).length, 'files;', Object.keys(izip.files).filter((n) => n.includes('uploads/') && !n.endsWith('/')).join(', '));
+  console.log('import status:', await imp.locator('#status').innerText());
   await ctx.close();
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -99,3 +99,22 @@ test('bulk mode shares one zip, keeps folder names unique and builds an index', 
   assert.match(md, /\[Marketing plan review\]\(2025-10-30_marketing-plan-review\/README\.md\)/);
   assert.match(md, /Bad \\\| chat: HTTP 404/);
 });
+
+test('reads the official data export and finds its files', async () => {
+  const { readConversations, fileLookup } = require('../src/import-core.js');
+  const src = new JSZip();
+  const older = { ...conv, title: 'Older', update_time: 1, conversation_id: undefined, id: 'old-id' };
+  src.file('conversations.json', JSON.stringify([older, conv]));
+  src.file('file-PDF1-Q4 plan.pdf', 'pdf');
+  src.file('file-IMG1.jpeg', 'jpg');
+  src.file('dalle-generations/file_GEN1-1234.webp', 'webp');
+  src.file('chat.html', '<html>');
+  const convs = await readConversations(src);
+  assert.deepStrictEqual(convs.map((c) => c.conversation_id), [conv.conversation_id, 'old-id']);
+  const download = fileLookup(src);
+  const { report, zip, folder } = await exportConversation(convs[0], { JSZip, downloadFile: download });
+  const names = Object.keys(zip.files).filter((n) => n.includes('/files/')).map((n) => n.slice(folder.length + 1)).filter((n) => !n.endsWith('/')).sort();
+  assert.deepStrictEqual(names, ['files/canvas/Launch email.md', 'files/generated/1234.webp', 'files/uploads/Q4 plan.pdf', 'files/uploads/whiteboard.jpg']);
+  assert.deepStrictEqual(report.filesFailed.map((f) => f.name), ['chart.png', 'old.csv']);
+  await assert.rejects(readConversations(new JSZip()), /no conversations\.json/);
+});

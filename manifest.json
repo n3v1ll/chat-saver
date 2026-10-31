@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chat Saver for ChatGPT",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Save a ChatGPT chat with all its files, an AI summary, and a brief to continue it in a new chat.",
   "permissions": ["storage"],
   "host_permissions": [

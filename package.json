@@ -1,6 +1,6 @@
 {
   "name": "chat-saver",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chrome extension that saves a ChatGPT chat with its files, an AI summary and a continue brief",
   "directories": {
     "test": "test"
