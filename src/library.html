@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat Saver library</title>
+  <link rel="stylesheet" href="library.css">
+</head>
+<body>
+  <header>
+    <div class="brand">Chat Saver <span id="count" class="muted"></span></div>
+    <div class="actions">
+      <a href="import.html">Import an export</a>
+      <a href="options.html">Settings</a>
+    </div>
+  </header>
+
+  <section id="welcome" class="card hidden">
+    <h2>Welcome to Chat Saver</h2>
+    <ol>
+      <li>Turn on <b>Back up automatically</b> below.</li>
+      <li>Keep ChatGPT or Claude open in a tab, as you normally would. New and changed chats are saved every few minutes to <b>Downloads/<span class="folder-name">Chat Saver</span></b>, with all their files.</li>
+      <li>Search everything here. To start right away with all your existing chats, click <b>Back up now</b>.</li>
+    </ol>
+  </section>
+
+  <section class="card backup">
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="autoBackup"> <b>Back up automatically</b></label>
+      <label><input type="checkbox" id="backupSummaries"> AI summary for each chat</label>
+      <span class="grow"></span>
+      <button id="backupNow">Back up now</button>
+      <button id="showFolder" class="secondary">Show folder</button>
+    </div>
+    <div id="backupStatus" class="muted small"></div>
+  </section>
+
+  <main>
+    <div class="list-pane">
+      <input id="search" type="search" placeholder="Search all chats, summaries and transcripts" autofocus>
+      <div class="chips" id="chips">
+        <button data-p="" class="chip on">All</button>
+        <button data-p="chatgpt" class="chip">ChatGPT</button>
+        <button data-p="claude" class="chip">Claude</button>
+      </div>
+      <div id="results"></div>
+    </div>
+    <article id="viewer" class="viewer">
+      <div class="empty muted">Pick a chat to read it here.</div>
+    </article>
+  </main>
+
+  <script src="db.js"></script>
+  <script src="markdown.js"></script>
+  <script src="search.js"></script>
+  <script src="library.js"></script>
+</body>
+</html>

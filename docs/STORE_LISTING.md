@@ -4,17 +4,21 @@ Copy these into the Chrome Web Store developer dashboard. Avoid OpenAI's logo an
 
 ## Basics
 
-- **Name:** Chat Saver for ChatGPT
+- **Name:** Chat Saver: back up ChatGPT and Claude chats
 - **Category:** Productivity
 - **Language:** English
 
 **Short description** (132 characters max):
 
-> Save any ChatGPT chat with its files, an AI summary, and a brief to continue it in a new chat. Everything stays on your computer.
+> Automatic backup of your ChatGPT and Claude chats, with every file, plus search across all of them. Private: no server.
 
 ## Detailed description
 
-Save your ChatGPT work properly, not just the text.
+Never lose an AI chat again. Chat Saver backs up your ChatGPT and Claude chats automatically, with every file in them, to a folder on your computer. Then it lets you search all of them in one place.
+
+Automatic backup: keep ChatGPT or Claude open as usual, and new and changed chats are saved every few minutes. No clicking.
+
+Search everything: one library for all your AI chats. Find that prompt, code snippet or decision in seconds.
 
 One click turns a chat into a tidy folder:
 
@@ -31,17 +35,22 @@ Already have ChatGPT's data export? Import it and get the same organised folders
 
 Private by design. Chat Saver has no server. Your chats are saved straight to your computer. The optional AI summary uses your own OpenAI or Anthropic API key and goes only to the provider you choose.
 
-Not affiliated with OpenAI. ChatGPT is a trademark of OpenAI.
+Not affiliated with OpenAI or Anthropic. ChatGPT is a trademark of OpenAI; Claude is a trademark of Anthropic.
 
 ## Privacy tab answers
 
-- **Single purpose:** Save the user's ChatGPT conversations and their files to the user's computer.
+- **Single purpose:** Back up the user's ChatGPT and Claude conversations and their files to the user's computer, and let them search those backups.
 - **Permission justifications:**
-  - `storage`: keeps the user's settings (AI provider, model, API key) in the browser.
-  - Host `chatgpt.com`: reads the chat the user chooses to save, through the user's own session.
+  - `storage`: keeps the user's settings (AI provider, model, API key, backup on/off) in the browser.
+  - `unlimitedStorage`: the searchable library of backed-up chats is kept in the browser's IndexedDB and can exceed the default quota.
+  - `downloads`: writes backup files into the user's Downloads folder.
+  - `downloads.ui`: hides the download bubble while automatic backups write files, so backups stay quiet.
+  - `alarms`: checks for changed chats every few minutes.
+  - Host `claude.ai`: reads the Claude chat the user chooses to save (or that auto-backup finds changed), through the user's own session.
+  - Hosts `chatgpt.com`, `chat.openai.com`: read the ChatGPT chats being saved, through the user's own session.
   - Host `*.oaiusercontent.com`: downloads the files attached to that chat.
   - Hosts `api.openai.com`, `api.anthropic.com`: send the chat to the user's chosen AI provider for the optional summary, with the user's own key.
-  - `tabs` is not requested. The popup only messages the active ChatGPT tab.
+  - `tabs` is not requested. Host permissions let the extension find open ChatGPT and Claude tabs to back up.
 - **Data usage:** collects "Website content" (the chats being saved) for the extension's core function only. Not sold, not used for anything else, not used for creditworthiness.
 - **Remote code:** none. All code ships in the package.
 - **Privacy policy URL:** host `docs/PRIVACY.md` (for example via GitHub Pages) and paste the link.

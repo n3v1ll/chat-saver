@@ -1,4 +1,4 @@
-// Pure conversion helpers: ChatGPT conversation JSON -> Markdown, file list, links.
+// Pure conversion helpers: conversation JSON (ChatGPT's shape; Claude chats are converted to it) -> Markdown, file list, links.
 // Loaded as a classic script in the extension (exposes globalThis.ChatSaver)
 // and as a CommonJS module in Node tests.
 (function (root) {
@@ -48,7 +48,7 @@
 
   function pointerToFileId(pointer) {
     if (!pointer) return null;
-    const m = String(pointer).match(/^(?:file-service|sediment):\/\/(.+)$/);
+    const m = String(pointer).match(/^(?:file-service|sediment|claude-file):\/\/(.+)$/);
     return m ? m[1] : null;
   }
 
@@ -163,10 +163,19 @@
       .replace(/【[^】]*】/g, '');
   }
 
-  function roleLabel(msg) {
+  function assistantName(conv) {
+    return conv && conv.provider === 'claude' ? 'Claude' : 'ChatGPT';
+  }
+
+  function chatUrl(conv) {
+    if (conv.chat_url) return conv.chat_url;
+    return conv.conversation_id ? `https://chatgpt.com/c/${conv.conversation_id}` : '';
+  }
+
+  function roleLabel(msg, assistant) {
     const role = msg.author && msg.author.role;
     if (role === 'user') return 'You';
-    if (role === 'assistant') return 'ChatGPT';
+    if (role === 'assistant') return assistant || 'ChatGPT';
     if (role === 'tool') return `Tool${msg.author.name ? ` (${msg.author.name})` : ''}`;
     return role || 'Unknown';
   }
@@ -255,7 +264,7 @@
       const versions = pendingVersions;
       pendingVersions = 1;
       const model = msg.metadata && msg.metadata.model_slug;
-      const header = `## ${roleLabel(msg)}${model && msg.author.role === 'assistant' ? ` · ${model}` : ''}`;
+      const header = `## ${roleLabel(msg, assistantName(conv))}${model && msg.author.role === 'assistant' ? ` · ${model}` : ''}`;
       lines.push(header, '');
       if (versions > 1) lines.push(`*(1 of ${versions} versions shown)*`, '');
       lines.push(body, '');
@@ -269,7 +278,7 @@
     for (const { message: msg } of linearize(conv)) {
       if (!isVisible(msg)) continue;
       const body = renderMessage(msg, new Map());
-      if (body) out.push(`${roleLabel(msg).toUpperCase()}:\n${body}`);
+      if (body) out.push(`${roleLabel(msg, assistantName(conv)).toUpperCase()}:\n${body}`);
     }
     const text = out.join('\n\n');
     const limit = maxChars || 120000;
@@ -293,7 +302,7 @@
       `- Messages: ${visible.length}`,
       `- Files saved: ${saved.length}${failed.length ? `, ${failed.length} could not be saved` : ''}`,
       `- Web sources: ${links.length}`,
-      conv.conversation_id ? `- Original chat: https://chatgpt.com/c/${conv.conversation_id}` : '',
+      chatUrl(conv) ? `- Original chat: ${chatUrl(conv)}` : '',
       '', '## What is in this folder', '',
       '- `transcript.md`: the full chat, with files linked inline',
       '- `conversation.json`: the complete original data, including edited and regenerated versions',
@@ -325,7 +334,7 @@
 
   const api = {
     linearize, countBranches, isVisible, pointerToFileId, collectFiles, collectSandboxFiles,
-    collectCanvasFromMessages, collectLinks, safeName, slug, isoDate, folderName, cleanText,
+    collectCanvasFromMessages, collectLinks, assistantName, chatUrl, safeName, slug, isoDate, folderName, cleanText,
     renderMessage, toMarkdown, toPlainText, linksMarkdown, readmeMarkdown, continueFallback,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

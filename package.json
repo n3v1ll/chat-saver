@@ -1,14 +1,14 @@
 {
   "name": "chat-saver",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Chrome extension that saves a ChatGPT chat with its files, an AI summary and a continue brief",
   "directories": {
     "test": "test"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "test:e2e": "node test/e2e.js",
-    "package": "mkdir -p dist && zip -r dist/chat-saver.zip manifest.json src vendor icons"
+    "test:e2e": "node test/e2e.js && node test/e2e-backup.js",
+    "package": "mkdir -p dist && rm -f dist/chat-saver.zip && zip -r dist/chat-saver.zip manifest.json src vendor icons"
   },
   "author": "",
   "license": "UNLICENSED",
