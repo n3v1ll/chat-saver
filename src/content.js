@@ -1,119 +1,43 @@
-// Runs on chatgpt.com: adds the "Save chat" button and talks to ChatGPT's web API from the user's own tab.
+// Runs on supported chat sites: the "Save chat" button, bulk saves from the popup, auto-backup, and the self-test.
+// Site-specific API calls live in src/providers/*.js, which set globalThis.ChatSaverProvider.
 (function () {
   'use strict';
 
   const CS = globalThis.ChatSaver;
-
-  function conversationIdFromUrl() {
-    const m = location.pathname.match(/\/c\/([0-9a-f-]{36})/i);
-    return m ? m[1] : null;
-  }
-
-  function getCookie(name) {
-    const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    return m ? decodeURIComponent(m[1]) : null;
-  }
-
-  let cachedToken = null;
-  async function authHeaders() {
-    if (!cachedToken) {
-      const res = await fetch('/api/auth/session', { credentials: 'include' });
-      if (!res.ok) throw new Error('Could not read your ChatGPT session. Are you logged in?');
-      const session = await res.json();
-      cachedToken = session.accessToken;
-      if (!cachedToken) throw new Error('No ChatGPT session found. Please log in and try again.');
-    }
-    const headers = { Authorization: `Bearer ${cachedToken}` };
-    const account = getCookie('_account');
-    if (account) headers['ChatGPT-Account-Id'] = account; // Team / workspace accounts
-    return headers;
-  }
-
-  async function api(path) {
-    const res = await fetch(path, { credentials: 'include', headers: await authHeaders() });
-    if (res.status === 401) cachedToken = null;
-    if (!res.ok) throw new Error(`ChatGPT returned ${res.status} for ${path.split('?')[0]}`);
-    return res.json();
-  }
-
-  function sendToBackground(message) {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(message, (reply) => {
-        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-        if (!reply || !reply.ok) return reject(new Error((reply && reply.error) || 'No reply from extension'));
-        resolve(reply.result);
-      });
-    });
-  }
-
-  function base64ToBytes(b64) {
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return bytes;
-  }
-
-  async function fetchBytes(url) {
-    const absolute = new URL(url, location.origin);
-    if (absolute.origin === location.origin) {
-      const res = await fetch(absolute, { credentials: 'include', headers: await authHeaders() });
-      if (!res.ok) throw new Error(`download failed (${res.status})`);
-      return { bytes: new Uint8Array(await res.arrayBuffer()), contentType: res.headers.get('content-type') };
-    }
-    // Signed links on other hosts are fetched by the background worker to avoid CORS.
-    const got = await sendToBackground({ type: 'fetchBinary', url: absolute.href });
-    return { bytes: base64ToBytes(got.base64), contentType: got.contentType };
-  }
-
-  // Signed download links expire within minutes, so each one is requested right before it is used.
-  async function downloadFile(convId, ref) {
-    let info;
-    if (ref.kind === 'sandbox') {
-      info = await api(`/backend-api/conversation/${convId}/interpreter/download?message_id=${encodeURIComponent(ref.messageId)}&sandbox_path=${encodeURIComponent(ref.sandboxPath)}`);
-    } else {
-      try {
-        info = await api(`/backend-api/files/download/${encodeURIComponent(ref.id)}?conversation_id=${convId}&inline=false`);
-      } catch (e) {
-        info = await api(`/backend-api/files/${encodeURIComponent(ref.id)}/download`);
-      }
-    }
-    if (!info || !info.download_url) throw new Error((info && (info.error_message || info.error_code)) || 'no download link (file may have expired)');
-    const got = await fetchBytes(info.download_url);
-    return { ...got, name: info.file_name || null };
-  }
-
-  async function fetchTextdocs(convId) {
-    const docs = await api(`/backend-api/conversation/${convId}/textdocs`);
-    return (Array.isArray(docs) ? docs : []).map((d) => ({ title: d.title, textdoc_type: d.textdoc_type, content: d.content }));
-  }
+  const P = globalThis.ChatSaverProvider;
+  const { sendToBackground } = globalThis.ChatSaverRuntime;
+  if (!P) return;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const VERSION = chrome.runtime.getManifest().version;
 
-  // Retry on rate limiting with growing waits, so bulk saves never hammer ChatGPT.
+  // Retry on rate limiting with growing waits, so bulk saves never hammer the site.
   async function withBackoff(fn, setStatus) {
     for (let wait = 10000; ; wait *= 2) {
       try {
         return await fn();
       } catch (err) {
         if (!/ 429 /.test(String(err.message)) || wait > 80000) throw err;
-        setStatus(`ChatGPT asked us to slow down, waiting ${wait / 1000}s`);
+        setStatus(`${P.label} asked us to slow down, waiting ${wait / 1000}s`);
         await sleep(wait);
       }
     }
   }
 
   async function exportOne(convId, opts) {
-    const conv = await api(`/backend-api/conversation/${convId}`);
-    conv.conversation_id = conv.conversation_id || convId;
-    return CS.exportConversation(conv, {
+    const conv = await P.getConversation(convId);
+    const result = await CS.exportConversation(conv, {
       JSZip,
       zip: opts.zip,
       usedFolders: opts.usedFolders,
-      downloadFile: (ref) => downloadFile(convId, ref),
-      fetchTextdocs: () => fetchTextdocs(convId),
+      folder: opts.folderFor ? opts.folderFor(conv) : undefined,
+      existingFiles: opts.existingFiles,
+      downloadFile: (ref) => P.downloadFile(convId, ref),
+      fetchTextdocs: () => P.fetchTextdocs(convId),
       summarize: opts.withSummary === false ? null : (title, transcript) => sendToBackground({ type: 'summarize', title, transcript }),
       onProgress: opts.onProgress,
     });
+    return { ...result, conv };
   }
 
   async function downloadZip(zip, name) {
@@ -129,7 +53,7 @@
   }
 
   async function saveCurrentChat(setStatus) {
-    const convId = conversationIdFromUrl();
+    const convId = P.conversationIdFromUrl();
     if (!convId) throw new Error('Open a chat first.');
     setStatus('Reading chat');
     const { zip, folder, report } = await exportOne(convId, { onProgress: setStatus });
@@ -159,47 +83,157 @@
     zip.file('index.md', CS.indexMarkdown(reports));
     zip.file('index.json', JSON.stringify(reports, null, 2));
     setStatus('Building ZIP');
-    await downloadZip(zip, `chatgpt-chats_${new Date().toISOString().slice(0, 10)}.zip`);
+    await downloadZip(zip, `${P.id}-chats_${new Date().toISOString().slice(0, 10)}.zip`);
     return reports;
   }
 
-  async function listConversations(offset) {
-    const page = await api(`/backend-api/conversations?offset=${offset || 0}&limit=50&order=updated`);
-    return {
-      items: (page.items || []).map((c) => ({ id: c.id, title: c.title, updated: CS.isoDate(c.update_time) })),
-      total: page.total,
-    };
+  // ---- Auto-backup ----
+  // Walks the chat list newest first and backs up chats that changed since the last run.
+  // Files saved before are not downloaded again.
+
+  const MIME = { md: 'text/markdown', json: 'application/json', txt: 'text/plain', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf', csv: 'text/csv', html: 'text/html', svg: 'image/svg+xml' };
+  const mimeFor = (path) => MIME[(path.split('.').pop() || '').toLowerCase()] || 'application/octet-stream';
+  const tabToken = Math.random().toString(36).slice(2);
+  const MAX_PER_TICK = 25;
+  const ACTIVE_GRACE_S = 120; // leave chats that are still being written in alone for a couple of minutes
+  let busy = false;
+
+  async function backupOne(item, prev, withSummary) {
+    // The folder name is fixed on the first backup (date, title, short id) so later renames don't duplicate it.
+    const folderFor = (conv) => (prev && prev.folder) || `${CS.folderName(conv)}_${String(item.id).slice(0, 8)}`;
+    const res = await exportOne(item.id, { folderFor, existingFiles: prev && prev.files, withSummary });
+    let readmeDownloadId = null;
+    for (const path of res.written) {
+      const base64 = await res.zip.file(`${res.folder}/${path}`).async('base64');
+      const id = await sendToBackground({ type: 'backupFile', provider: P.id, folder: res.folder, path, base64, mime: mimeFor(path) });
+      if (path === 'README.md') readmeDownloadId = id;
+    }
+    await sendToBackground({
+      type: 'backupRecord',
+      record: {
+        key: `${P.id}:${item.id}`,
+        provider: P.id,
+        id: item.id,
+        title: res.conv.title || item.title,
+        created: CS.isoDate(res.conv.create_time),
+        updated: CS.isoDate(item.updateTime),
+        updateTime: item.updateTime,
+        folder: res.folder,
+        url: CS.chatUrl(res.conv),
+        files: res.files,
+        filesSaved: res.report.filesSaved,
+        filesFailed: res.report.filesFailed.length,
+        transcript: res.transcript,
+        summary: res.summary || (prev && prev.summary) || null,
+        readmeDownloadId,
+        backedUpAt: Date.now(),
+      },
+    });
   }
 
-  let busy = false;
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === 'listConversations') {
-      listConversations(msg.offset).then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e) }));
-      return true;
-    }
-    if (msg.type === 'saveMany') {
-      if (busy) {
-        sendResponse({ ok: false, error: 'A save is already running in this tab.' });
-        return false;
+  async function backupTick(force) {
+    const settings = await chrome.storage.local.get(['autoBackup', 'backupSummaries']);
+    if ((!settings.autoBackup && !force) || busy) return { skipped: true };
+    if (!(await sendToBackground({ type: 'backupLock', owner: tabToken }))) return { skipped: true };
+    busy = true;
+    let done = 0;
+    let more = false;
+    try {
+      const state = await sendToBackground({ type: 'backupState', provider: P.id });
+      const now = Date.now() / 1000;
+      const queue = [];
+      for (let offset = 0; queue.length < MAX_PER_TICK; ) {
+        const page = await P.listConversations(offset);
+        let changed = 0;
+        for (const item of page.items) {
+          const prev = state[item.id];
+          if (prev && prev.updateTime >= item.updateTime) continue;
+          changed++;
+          if (now - item.updateTime < ACTIVE_GRACE_S) continue;
+          if (queue.length < MAX_PER_TICK) queue.push(item);
+          else more = true;
+        }
+        // The list is newest first, so a page with no changes means everything older is backed up too.
+        if (!changed || !page.hasMore) break;
+        offset += page.items.length;
+        await sleep(1000);
       }
-      busy = true;
-      sendResponse({ ok: true }); // the popup may close; progress shows in the page
-      saveManyChats(msg.items, msg.withSummary, (t) => toast(`<b>Chat Saver</b><br>${escapeHtml(t)}`))
-        .then((reports) => {
-          const failed = reports.filter((r) => r.error).length;
-          toast(`<b>Saved ${reports.length - failed} chat(s).</b>${failed ? ` ${failed} failed, see index.md.` : ''}`, 15000);
-        }, (err) => toast(`<b>Bulk save failed.</b><br>${escapeHtml(err.message || err)}`, 15000))
-        .finally(() => { busy = false; });
-      return false;
+      for (const item of queue) {
+        try {
+          await withBackoff(() => backupOne(item, state[item.id], !!settings.backupSummaries), () => {});
+          done++;
+        } catch (err) {
+          await sendToBackground({ type: 'backupError', error: `${item.title}: ${err.message || err}` });
+        }
+        await sleep(2000);
+      }
+      if (queue.length >= MAX_PER_TICK) more = true;
+    } catch (err) {
+      await sendToBackground({ type: 'backupError', error: String(err.message || err) }).catch(() => {});
+      throw err;
+    } finally {
+      busy = false;
+      await sendToBackground({ type: 'backupUnlock', owner: tabToken }).catch(() => {});
     }
-    return false;
+    if (more) setTimeout(() => backupTick(force).catch(() => {}), 30000); // keep working through a big first backup
+    return { done, more };
+  }
+
+  // ---- Self-test ----
+
+  async function selfTest() {
+    let sampleId = P.conversationIdFromUrl();
+    const results = [];
+    if (!sampleId) {
+      try {
+        sampleId = (await P.listConversations(0)).items[0].id;
+      } catch (e) { /* reported by the list test */ }
+    }
+    for (const [name, fn] of P.selfTests(sampleId)) {
+      const started = Date.now();
+      try {
+        results.push({ name, ok: true, detail: await fn(), ms: Date.now() - started });
+      } catch (err) {
+        results.push({ name, ok: false, detail: String(err.message || err), ms: Date.now() - started });
+      }
+    }
+    return { app: P.label, extensionVersion: VERSION, browser: navigator.userAgent, ranAt: new Date().toISOString(), results };
+  }
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    const reply = (promise) => {
+      promise.then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e) }));
+      return true;
+    };
+    switch (msg.type) {
+      case 'whoami': sendResponse({ ok: true, result: { id: P.id, label: P.label } }); return false;
+      case 'listConversations': return reply(P.listConversations(msg.offset));
+      case 'selfTest': return reply(selfTest());
+      case 'backupTick': return reply(backupTick(!!msg.force));
+      case 'saveMany':
+        if (busy) {
+          sendResponse({ ok: false, error: 'A save is already running in this tab.' });
+          return false;
+        }
+        busy = true;
+        sendResponse({ ok: true }); // the popup may close; progress shows in the page
+        saveManyChats(msg.items, msg.withSummary, (t) => toast(`<b>Chat Saver</b><br>${escapeHtml(t)}`))
+          .then((reports) => {
+            const failed = reports.filter((r) => r.error).length;
+            toast(`<b>Saved ${reports.length - failed} chat(s).</b>${failed ? ` ${failed} failed, see index.md.` : ''}`, 15000);
+          }, (err) => toast(`<b>Bulk save failed.</b><br>${escapeHtml(err.message || err)}`, 15000))
+          .finally(() => { busy = false; });
+        return false;
+      default:
+        return false;
+    }
   });
 
   // ---- UI ----
   const style = document.createElement('style');
   style.textContent = `
     #chat-saver-btn { position: fixed; right: 20px; bottom: 96px; z-index: 2147483000; display: flex; align-items: center; gap: 6px;
-      padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(0,0,0,.15); background: #10a37f; color: #fff;
+      padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(0,0,0,.15); background: ${P.color}; color: #fff;
       font: 600 13px/1.2 system-ui, sans-serif; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
     #chat-saver-btn[disabled] { opacity: .85; cursor: progress; }
     #chat-saver-toast { position: fixed; right: 20px; bottom: 140px; z-index: 2147483000; max-width: 320px; padding: 10px 12px;
@@ -226,7 +260,7 @@
 
   function ensureButton() {
     let btn = document.getElementById('chat-saver-btn');
-    const onChat = !!conversationIdFromUrl();
+    const onChat = !!P.conversationIdFromUrl();
     if (!onChat) {
       if (btn) btn.remove();
       return;
@@ -260,7 +294,11 @@
     document.body.appendChild(btn);
   }
 
-  // ChatGPT is a single-page app, so watch for navigation between chats.
+  // Chat sites are single-page apps, so watch for navigation between chats.
   ensureButton();
   setInterval(ensureButton, 1000);
+
+  // Auto-backup: shortly after the page loads, then every few minutes (the background alarm also nudges us).
+  setTimeout(() => backupTick(false).catch(() => {}), 15000);
+  setInterval(() => backupTick(false).catch(() => {}), 5 * 60 * 1000);
 })();

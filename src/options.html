@@ -16,7 +16,7 @@
 </head>
 <body>
   <h1>Chat Saver</h1>
-  <p>Open any chat on chatgpt.com and click <b>Save chat</b> (bottom right). Add an API key below to get an AI summary at the top of each saved chat.</p>
+  <p>Open any chat on ChatGPT or Claude and click <b>Save chat</b> (bottom right). Add an API key below to get an AI summary at the top of each saved chat.</p>
 
   <label for="provider">AI provider for summaries</label>
   <select id="provider">
@@ -31,6 +31,10 @@
   <label for="model">Model (optional)</label>
   <input id="model" type="text" placeholder="">
   <div class="hint">Leave blank for the default.</div>
+
+  <label for="backupFolder">Backup folder (inside your Downloads folder)</label>
+  <input id="backupFolder" type="text" placeholder="Chat Saver">
+  <div class="hint">Automatic backups go to Downloads/<i>this folder</i>. Turn them on in the <a href="library.html">library</a>.</div>
 
   <button id="save">Save settings</button><span id="status"></span>
   <script src="summary.js"></script>

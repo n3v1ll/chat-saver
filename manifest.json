@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Chat Saver for ChatGPT",
-  "version": "0.2.0",
-  "description": "Save a ChatGPT chat with all its files, an AI summary, and a brief to continue it in a new chat.",
-  "permissions": ["storage"],
+  "name": "Chat Saver: back up ChatGPT and Claude chats",
+  "version": "0.3.0",
+  "description": "Automatic backup of your ChatGPT and Claude chats with all their files, a searchable library, AI summaries and continue briefs.",
+  "permissions": ["storage", "unlimitedStorage", "downloads", "downloads.ui", "alarms"],
   "host_permissions": [
     "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
     "https://*.oaiusercontent.com/*",
+    "https://claude.ai/*",
     "https://api.openai.com/*",
     "https://api.anthropic.com/*"
   ],
@@ -14,7 +16,12 @@
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-      "js": ["vendor/jszip.min.js", "src/convert.js", "src/exporter.js", "src/content.js"],
+      "js": ["vendor/jszip.min.js", "src/convert.js", "src/exporter.js", "src/runtime.js", "src/providers/chatgpt.js", "src/content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["vendor/jszip.min.js", "src/convert.js", "src/exporter.js", "src/runtime.js", "src/providers/claude-convert.js", "src/providers/claude.js", "src/content.js"],
       "run_at": "document_idle"
     }
   ],
