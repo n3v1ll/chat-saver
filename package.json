@@ -1,6 +1,6 @@
 {
   "name": "chat-saver",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Chrome extension that backs up ChatGPT and Claude chats with their files and a searchable library",
   "directories": {
     "test": "test"

@@ -34,7 +34,7 @@ function renderResults() {
     const el = document.createElement('div');
     el.className = `result${r.key === openKey ? ' on' : ''}`;
     el.innerHTML = `<div class="t">${highlight(r.title || 'Untitled', words)}</div>
-      <div class="m"><span class="badge ${r.provider}">${LABELS[r.provider] || r.provider}</span>${escapeHtml(r.updated || '')}${r.filesSaved ? ` · ${r.filesSaved} file(s)` : ''}</div>
+      <div class="m"><span class="badge ${r.provider}">${LABELS[r.provider] || r.provider}</span>${r.project ? `${escapeHtml(r.project)} · ` : ''}${escapeHtml(r.updated || '')}${r.filesSaved ? ` · ${r.filesSaved} file(s)` : ''}</div>
       <div class="s">${highlight(snippet, words)}</div>`;
     el.addEventListener('click', () => openRecord(r.key));
     box.append(el);

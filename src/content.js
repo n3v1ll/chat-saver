@@ -100,7 +100,8 @@
 
   async function backupOne(item, prev, withSummary) {
     // The folder name is fixed on the first backup (date, title, short id) so later renames don't duplicate it.
-    const folderFor = (conv) => (prev && prev.folder) || `${CS.folderName(conv)}_${String(item.id).slice(0, 8)}`;
+    const folderFor = (conv) => (prev && prev.folder)
+      || `${item.project ? `${CS.safeName(item.project, 'Project')}/` : ''}${CS.folderName(conv)}_${String(item.id).slice(0, 8)}`;
     const res = await exportOne(item.id, { folderFor, existingFiles: prev && prev.files, withSummary });
     let readmeDownloadId = null;
     for (const path of res.written) {
@@ -115,6 +116,7 @@
         provider: P.id,
         id: item.id,
         title: res.conv.title || item.title,
+        ...(item.project ? { project: item.project } : {}),
         created: CS.isoDate(res.conv.create_time),
         updated: CS.isoDate(item.updateTime),
         updateTime: item.updateTime,
@@ -143,21 +145,38 @@
       const state = await sendToBackground({ type: 'backupState', provider: P.id });
       const now = Date.now() / 1000;
       const queue = [];
-      for (let offset = 0; queue.length < MAX_PER_TICK; ) {
-        const page = await P.listConversations(offset);
-        let changed = 0;
-        for (const item of page.items) {
-          const prev = state[item.id];
-          if (prev && prev.updateTime >= item.updateTime) continue;
-          changed++;
-          if (now - item.updateTime < ACTIVE_GRACE_S) continue;
-          if (queue.length < MAX_PER_TICK) queue.push(item);
-          else more = true;
+      const queued = new Set();
+      // Walks one newest-first list. A page with no changes means everything older is backed up too.
+      const scan = async (fetchPage, project) => {
+        for (let cursor = null; queue.length < MAX_PER_TICK; ) {
+          const page = await fetchPage(cursor);
+          let changed = 0;
+          for (const item of page.items) {
+            const prev = state[item.id];
+            if ((prev && prev.updateTime >= item.updateTime) || queued.has(item.id)) continue;
+            changed++;
+            if (now - item.updateTime < ACTIVE_GRACE_S) continue;
+            if (queue.length < MAX_PER_TICK) {
+              queue.push({ ...item, project });
+              queued.add(item.id);
+            } else more = true;
+          }
+          if (!changed || page.next == null) break;
+          cursor = page.next;
+          await sleep(1000);
         }
-        // The list is newest first, so a page with no changes means everything older is backed up too.
-        if (!changed || !page.hasMore) break;
-        offset += page.items.length;
-        await sleep(1000);
+      };
+      await scan(async (offset) => {
+        const page = await P.listConversations(offset || 0);
+        return { items: page.items, next: page.hasMore ? (offset || 0) + page.items.length : null };
+      });
+      // ChatGPT Projects keep their chats out of the main list.
+      if (P.listProjects && queue.length < MAX_PER_TICK) {
+        for (const project of await P.listProjects()) {
+          if (queue.length >= MAX_PER_TICK) { more = true; break; }
+          await scan((cursor) => P.listProjectConversations(project.id, cursor), project.name);
+          await sleep(1000);
+        }
       }
       for (const item of queue) {
         try {

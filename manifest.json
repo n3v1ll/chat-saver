@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chat Saver: back up ChatGPT and Claude chats",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Automatic backup of your ChatGPT and Claude chats with all their files, a searchable library, AI summaries and continue briefs.",
   "permissions": ["storage", "unlimitedStorage", "downloads", "downloads.ui", "alarms"],
   "host_permissions": [
