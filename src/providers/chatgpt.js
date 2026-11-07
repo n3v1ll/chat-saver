@@ -41,6 +41,7 @@
   root.ChatSaverProvider = {
     id: 'chatgpt',
     label: 'ChatGPT',
+    composerSelector: '#prompt-textarea, textarea[name="prompt-textarea"]',
     color: '#10a37f',
 
     conversationIdFromUrl() {
@@ -53,6 +54,28 @@
       const page = await api(`/backend-api/conversations?offset=${offset || 0}&limit=50&order=updated`);
       const items = (page.items || []).map((c) => ({ id: c.id, title: c.title, updateTime: toEpoch(c.update_time) }));
       return { items, total: page.total, hasMore: (offset || 0) + items.length < (page.total || 0) };
+    },
+
+    // Projects ("snorlax" in ChatGPT's API) and the chats inside them, which the main list leaves out.
+    async listProjects() {
+      const projects = [];
+      for (let cursor = null, guard = 0; guard < 20; guard++) {
+        const page = await api(`/backend-api/gizmos/snorlax/sidebar?owned_only=true&conversations_per_gizmo=0${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+        for (const item of page.items || []) {
+          const g = (item.gizmo && item.gizmo.gizmo) || item.gizmo;
+          if (g && g.id && !projects.some((p) => p.id === g.id)) projects.push({ id: g.id, name: (g.display && g.display.name) || 'Untitled project' });
+        }
+        cursor = page.cursor || null;
+        if (!cursor) break;
+      }
+      return projects;
+    },
+
+    async listProjectConversations(projectId, cursor) {
+      const page = await api(`/backend-api/gizmos/${encodeURIComponent(projectId)}/conversations?cursor=${encodeURIComponent(cursor || '0')}`);
+      const items = (page.items || []).map((c) => ({ id: c.id, title: c.title, updateTime: toEpoch(c.update_time) }));
+      items.sort((a, b) => b.updateTime - a.updateTime);
+      return { items, next: items.length && page.cursor ? page.cursor : null };
     },
 
     async getConversation(id) {
@@ -94,6 +117,12 @@
           const conv = await this.getConversation(sampleId);
           const types = new Set(Object.values(conv.mapping || {}).map((n) => n.message && n.message.content && n.message.content.content_type).filter(Boolean));
           return `${Object.keys(conv.mapping || {}).length} nodes; content types: ${[...types].join(', ')}`;
+        }],
+        ['Projects', async () => {
+          const projects = await this.listProjects();
+          if (!projects.length) return 'no projects';
+          const first = await this.listProjectConversations(projects[0].id, null);
+          return `${projects.length} project(s); first has ${first.items.length}${first.next ? '+' : ''} chat(s)`;
         }],
         ['Canvas endpoint', async () => { const d = await this.fetchTextdocs(sampleId); return `${d.length} canvas doc(s)`; }],
         ['File download', async () => {

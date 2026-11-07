@@ -34,7 +34,7 @@ function renderResults() {
     const el = document.createElement('div');
     el.className = `result${r.key === openKey ? ' on' : ''}`;
     el.innerHTML = `<div class="t">${highlight(r.title || 'Untitled', words)}</div>
-      <div class="m"><span class="badge ${r.provider}">${LABELS[r.provider] || r.provider}</span>${escapeHtml(r.updated || '')}${r.filesSaved ? ` · ${r.filesSaved} file(s)` : ''}</div>
+      <div class="m"><span class="badge ${r.provider}">${LABELS[r.provider] || r.provider}</span>${r.project ? `${escapeHtml(r.project)} · ` : ''}${escapeHtml(r.updated || '')}${r.filesSaved ? ` · ${r.filesSaved} file(s)` : ''}</div>
       <div class="s">${highlight(snippet, words)}</div>`;
     el.addEventListener('click', () => openRecord(r.key));
     box.append(el);
@@ -50,6 +50,8 @@ function openRecord(key) {
       ${r.url ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener"><button class="secondary">Open in ${LABELS[r.provider]}</button></a>` : ''}
       ${r.readmeDownloadId ? '<button class="secondary" id="vShow">Show files</button>' : ''}
       <button class="secondary" id="vCopy">Copy transcript</button>
+      <button id="vContGpt" title="Open a new ChatGPT chat with a brief of this one, ready to send">Continue in ChatGPT</button>
+      <button id="vContClaude" title="Open a new Claude chat with a brief of this one, ready to send">Continue in Claude</button>
       <span class="muted small" style="align-self:center">Saved in Downloads/…/${escapeHtml(LABELS[r.provider] || '')}/${escapeHtml(r.folder)}</span>
     </div>${render(r.transcript || '')}`;
   const show = $('vShow');
@@ -58,6 +60,14 @@ function openRecord(key) {
     await navigator.clipboard.writeText(r.transcript || '');
     $('vCopy').textContent = 'Copied';
   });
+  for (const [id, target] of [['vContGpt', 'chatgpt'], ['vContClaude', 'claude']]) {
+    $(id).addEventListener('click', async () => {
+      const text = r.continueText || `I'm continuing a previous conversation titled "${r.title}". Here is the transcript:\n\n${r.transcript || ''}`;
+      // Also on the clipboard, in case the site changed and the box can't be filled.
+      await navigator.clipboard.writeText(text).catch(() => {});
+      chrome.runtime.sendMessage({ type: 'continueIn', target, text, title: r.title });
+    });
+  }
   v.scrollTop = 0;
   renderResults();
 }

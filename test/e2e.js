@@ -4,6 +4,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
+const assert = require('assert');
 const ext = path.resolve(__dirname, '..');
 const conv = JSON.parse(fs.readFileSync(path.join(ext, 'test/fixture-conversation.json'), 'utf8'));
 const ID = conv.conversation_id;
@@ -46,7 +47,11 @@ const ID = conv.conversation_id;
   const zip = await JSZip.loadAsync(fs.readFileSync(file));
   console.log('download name:', dl.suggestedFilename());
   for (const [p, e] of Object.entries(zip.files)) if (!e.dir) console.log(' ', p, (await e.async('string')).slice(0, 70).replace(/\n/g, ' '));
-  console.log('toast:', await page.locator('#chat-saver-toast').innerText());
+  const toastText = await page.locator('#chat-saver-toast').innerText();
+  console.log('toast:', toastText);
+  assert.match(toastText, /^Saved\. 5 file\(s\) saved/);
+  assert.ok(zip.file(/README\.md$/)[0], 'single save has a README');
+  assert.match(await zip.file(/README\.md$/)[0].async('string'), /# AI summary/);
 
   // Bulk: drive the same messages the toolbar popup sends.
   const send = (msg) => sw.evaluate(async (m) => {
@@ -60,7 +65,10 @@ const ID = conv.conversation_id;
   console.log('bulk name:', bulk.suggestedFilename());
   console.log('bulk top-level:', Object.keys(bzip.files).filter((p) => !p.includes('/') || p.split('/').length === 2 && p.endsWith('/')).join(', '));
   console.log(await bzip.file('index.md').async('string'));
-  console.log('bulk toast:', await page.locator('#chat-saver-toast').innerText());
+  const bulkToast = await page.locator('#chat-saver-toast').innerText();
+  console.log('bulk toast:', bulkToast);
+  assert.match(bulkToast, /Saved 1 chat\(s\)\. 1 failed/);
+  assert.match(await bzip.file('index.md').async('string'), /Gone chat: ChatGPT returned 404/);
 
   // Import page: feed it a small fake official export.
   const src = new JSZip();
@@ -77,6 +85,10 @@ const ID = conv.conversation_id;
   const [idl] = await Promise.all([imp.waitForEvent('download', { timeout: 30000 }), imp.click('#build')]);
   const izip = await JSZip.loadAsync(fs.readFileSync(await idl.path()));
   console.log('import zip:', idl.suggestedFilename(), Object.keys(izip.files).filter((n) => !n.endsWith('/')).length, 'files;', Object.keys(izip.files).filter((n) => n.includes('uploads/') && !n.endsWith('/')).join(', '));
-  console.log('import status:', await imp.locator('#status').innerText());
+  const importStatus = await imp.locator('#status').innerText();
+  console.log('import status:', importStatus);
+  assert.strictEqual(importStatus, 'Done. 1 chats saved.');
+  assert.ok(izip.file(/files\/uploads\/Q4 plan\.pdf$/)[0], 'import keeps the uploaded file');
   await ctx.close();
+  console.log('E2E SAVE/BULK/IMPORT: PASS');
 })().catch((e) => { console.error(e); process.exit(1); });

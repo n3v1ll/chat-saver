@@ -11,6 +11,8 @@ const ext = path.resolve(__dirname, '..');
 const gpt = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixture-conversation.json'), 'utf8'));
 const claude = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixture-claude.json'), 'utf8'));
 const GPT_ID = gpt.conversation_id;
+const PROJ_UPDATED = new Date(Date.now() - 5000 * 1000).toISOString();
+const PROJ_ID = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
 const BIG = Buffer.alloc(6 * 1024 * 1024, 7); // a 6 MB upload, to check large files survive the backup path
 const old = (s) => new Date(Date.now() - s * 1000).toISOString();
 
@@ -35,6 +37,9 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
       ], total: 2 } });
     }
     if (url.pathname === `/backend-api/conversation/${GPT_ID}`) return route.fulfill({ json: gpt });
+    if (url.pathname === '/backend-api/gizmos/snorlax/sidebar') return route.fulfill({ json: { items: [{ gizmo: { gizmo: { id: 'g-p-123', display: { name: 'Client work' } }, files: [] } }], cursor: null } });
+    if (url.pathname === '/backend-api/gizmos/g-p-123/conversations') return route.fulfill({ json: { items: [{ id: PROJ_ID, title: 'Proposal draft', update_time: PROJ_UPDATED }], cursor: null } });
+    if (url.pathname === `/backend-api/conversation/${PROJ_ID}`) return route.fulfill({ json: { ...gpt, title: 'Proposal draft', conversation_id: PROJ_ID } });
     if (url.pathname.endsWith('/textdocs')) return route.fulfill({ json: [] });
     if (url.pathname.endsWith('/interpreter/download')) return route.fulfill({ json: { status: 'error', error_code: 'file_expired' } });
     if (url.pathname.startsWith('/backend-api/files/download/')) {
@@ -44,7 +49,7 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
     if (url.pathname === '/backend-api/estuary/content') {
       return route.fulfill({ body: url.searchParams.get('id') === 'file-PDF1' ? BIG : Buffer.from('IMG'), contentType: 'application/octet-stream' });
     }
-    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake chatgpt</body></html>' });
+    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake chatgpt<div id="prompt-textarea" contenteditable="true" class="ProseMirror"></div></body></html>' });
   });
 
   const claudeCalls = [];
@@ -55,7 +60,7 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
     if (url.pathname === '/api/organizations/org-1/chat_conversations') return route.fulfill({ json: [{ uuid: claude.uuid, name: claude.name, updated_at: old(7200) }] });
     if (url.pathname === `/api/organizations/org-1/chat_conversations/${claude.uuid}`) return route.fulfill({ json: claude });
     if (url.pathname.startsWith('/api/org-1/files/')) return route.fulfill({ body: Buffer.from('CLAUDEFILE'), contentType: 'image/png' });
-    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake claude</body></html>' });
+    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake claude<div contenteditable="true" class="ProseMirror"></div></body></html>' });
   });
 
   let [sw] = ctx.serviceWorkers();
@@ -77,13 +82,14 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
   await gptPage.locator('#chat-saver-btn').waitFor();
   const r1 = await send('https://chatgpt.com/*', { type: 'backupTick', force: true });
   console.log('chatgpt tick:', JSON.stringify(r1.result));
-  assert.strictEqual(r1.result.done, 1, 'one chat backed up, the active one skipped');
+  assert.strictEqual(r1.result.done, 2, 'main-list chat and project chat backed up, the active one skipped');
   let files = await downloads();
   const rel = files.map((f) => f.file.replace(/\\/g, '/').split('/Chat Saver/')[1]).filter(Boolean).sort();
   console.log('written:', rel.join('\n  '));
   const big = files.find((f) => f.file.endsWith('Q4 plan.pdf'));
   assert.ok(big && big.size === BIG.length, `6 MB file written in full (got ${big && big.size})`);
   assert.ok(rel.some((p) => p.startsWith('ChatGPT/') && p.endsWith('/transcript.md')));
+  assert.ok(rel.some((p) => p.startsWith('ChatGPT/Client work/') && p.endsWith('/transcript.md')), 'project chat saved under its project folder');
 
   // 2. Second tick: nothing changed, nothing written
   const lastId = Math.max(...files.map((f) => f.id));
@@ -130,9 +136,25 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
     await lib.locator('.result').first().click();
     await lib.screenshot({ path: path.join(process.env.SHOTS, '5-library.png') });
   }
+  // 6. Continue a ChatGPT chat in Claude (button on the chat page), and a Claude chat in ChatGPT (library)
+  const [claudeNew] = await Promise.all([ctx.waitForEvent('page'), gptPage.click('#chat-saver-cont')]);
+  await claudeNew.waitForURL('https://claude.ai/new');
+  await claudeNew.waitForFunction(() => /continuing a previous conversation/.test((document.querySelector('.ProseMirror') || {}).textContent), null, { timeout: 15000 });
+  console.log('continue in Claude: brief filled,', (await claudeNew.locator('.ProseMirror').innerText()).length, 'chars');
+  await lib.bringToFront();
+  const [gptNew] = await Promise.all([ctx.waitForEvent('page'), lib.click('#vContGpt')]);
+  await gptNew.waitForURL('https://chatgpt.com/');
+  await gptNew.waitForFunction(() => /Landing page copy/.test((document.querySelector('#prompt-textarea') || {}).textContent), null, { timeout: 15000 });
+  console.log('continue in ChatGPT from library: brief filled');
+  // A tab the user opens themselves must not receive the brief.
+  const other = await ctx.newPage();
+  await other.goto('https://chatgpt.com/');
+  await other.waitForTimeout(2000);
+  assert.strictEqual(await other.locator('#prompt-textarea').innerText(), '');
+
   await new Promise((r) => setTimeout(r, 4500));
   const index = fs.readFileSync(path.join(backupDir, 'index.md'), 'utf8');
-  assert.match(index, /2 chats backed up/);
+  assert.match(index, /3 chats backed up/);
   console.log('backup folder:', execSync(`cd "${backupDir}" && find . -type f | sort`).toString().trim().split('\n').join('\n  '));
   await ctx.close();
   console.log('E2E BACKUP: PASS');

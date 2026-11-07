@@ -29,6 +29,7 @@
   root.ChatSaverProvider = {
     id: 'claude',
     label: 'Claude',
+    composerSelector: 'div[contenteditable="true"].ProseMirror, div[contenteditable="true"]',
     color: '#c96442',
 
     conversationIdFromUrl() {

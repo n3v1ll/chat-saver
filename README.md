@@ -6,6 +6,8 @@ A Chrome extension that backs up your ChatGPT and Claude chats, with every file 
 - **Library.** Search every saved chat (titles, AI summaries and full transcripts), filter by app, read any chat, open the original, or jump to its files.
 - **One click saves.** The **Save chat** button downloads the current chat as a ZIP. The toolbar popup saves several chats at once.
 - **Everything in the chat.** Transcript, uploads, generated images, canvas documents and Claude artifacts, cited links, the original JSON, an optional AI summary at the top, and a `continue.md` brief for picking the work up in a new chat (in either app).
+- **Continue in the other app.** A **Continue in Claude** (or ChatGPT) button next to Save chat, and in the library, opens a new chat in the other app with a brief of this one in the message box, ready to send.
+- **ChatGPT Projects included.** Chats inside Projects are backed up into a folder per project.
 - **Official export import.** Turn ChatGPT's "Export data" ZIP into the same folders, offline.
 - **Self-test.** The popup's **Run self-test** checks every connection to ChatGPT or Claude and gives a report to copy when something breaks.
 
@@ -27,6 +29,8 @@ Downloads/Chat Saver/
     links.md           every web source cited
     continue.md        paste into a new chat to pick up where you left off
     export-report.json what was saved and anything that could not be
+    ...
+  ChatGPT/Client work/2025-11-02_proposal-draft_77777777/   chats in a ChatGPT Project
   Claude/...
 ```
 
@@ -51,7 +55,7 @@ These endpoints are not a public API and can change without notice. When somethi
 
 - Backups run while a ChatGPT or Claude tab is open. There is no server, so nothing runs when the browser is closed.
 - Code Interpreter files (`sandbox:/mnt/data/...`) are deleted by ChatGPT about an hour after the chat goes idle. Older ones are marked "expired" instead of saved.
-- Chats inside ChatGPT Projects don't appear in ChatGPT's main chat list, so auto-backup and the bulk list miss them. Open them and use **Save chat**.
+- The popup's "Save several chats" list shows only chats outside ChatGPT Projects. Auto-backup covers both.
 - Deleting a chat in the app does not delete its backup.
 - Very large official exports (several GB) may run out of browser memory. Import a filtered set of chats if so.
 - Voice audio is not saved.
@@ -61,8 +65,9 @@ These endpoints are not a public API and can change without notice. When somethi
 ```
 npm install
 npm test            # unit tests (Node 18+)
-npm run test:e2e    # loads the extension in Chromium against mocked chatgpt.com and claude.ai (needs Playwright)
+npm run test:e2e    # loads the extension in Chromium against mocked chatgpt.com and claude.ai
+                    # (first time: npx playwright install chromium)
 npm run package     # dist/chat-saver.zip for the Chrome Web Store
 ```
 
-The end-to-end backup test writes to `~/Downloads/Chat Saver` on the machine that runs it.
+The end-to-end backup test writes to `~/Downloads/Chat Saver` on the machine that runs it. GitHub Actions runs both test suites on every pull request.
