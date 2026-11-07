@@ -125,6 +125,7 @@
         filesFailed: res.report.filesFailed.length,
         transcript: res.transcript,
         summary: res.summary || (prev && prev.summary) || null,
+        continueText: res.continueText,
         readmeDownloadId,
         backedUpAt: Date.now(),
       },
@@ -232,7 +233,11 @@
   // ---- UI ----
   const style = document.createElement('style');
   style.textContent = `
-    #chat-saver-btn { position: fixed; right: 20px; bottom: 96px; z-index: 2147483000; display: flex; align-items: center; gap: 6px;
+    #chat-saver-bar { position: fixed; right: 20px; bottom: 96px; z-index: 2147483000; display: flex; gap: 8px; }
+    #chat-saver-cont { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(0,0,0,.15); background: #fff; color: #202123;
+      font: 600 13px/1.2 system-ui, sans-serif; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+    #chat-saver-cont[disabled] { opacity: .85; cursor: progress; }
+    #chat-saver-btn { display: flex; align-items: center; gap: 6px;
       padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(0,0,0,.15); background: ${P.color}; color: #fff;
       font: 600 13px/1.2 system-ui, sans-serif; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
     #chat-saver-btn[disabled] { opacity: .85; cursor: progress; }
@@ -258,15 +263,48 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  const OTHER_APP = P.id === 'claude' ? { id: 'chatgpt', label: 'ChatGPT' } : { id: 'claude', label: 'Claude' };
+
+  // A brief of the open chat (AI-written when an API key is set), opened in a new chat in the other app.
+  async function continueElsewhere(btn) {
+    const convId = P.conversationIdFromUrl();
+    btn.disabled = true;
+    btn.textContent = '⏳ Writing brief';
+    try {
+      const conv = await P.getConversation(convId);
+      let text = null;
+      try {
+        const res = await sendToBackground({ type: 'summarize', title: conv.title, transcript: CS.toPlainText(conv, 120000) });
+        text = res && !res.skipped ? res.continueBrief : null;
+      } catch (e) { /* fall back to the transcript brief */ }
+      text = text || CS.continueFallback(conv);
+      await navigator.clipboard.writeText(text).catch(() => {});
+      await sendToBackground({ type: 'continueIn', target: OTHER_APP.id, text, title: conv.title });
+    } catch (err) {
+      toast(`<b>Could not continue this chat.</b><br>${escapeHtml(err.message || err)}`, 15000);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = `↗ Continue in ${OTHER_APP.label}`;
+    }
+  }
+
   function ensureButton() {
-    let btn = document.getElementById('chat-saver-btn');
+    let bar = document.getElementById('chat-saver-bar');
     const onChat = !!P.conversationIdFromUrl();
     if (!onChat) {
-      if (btn) btn.remove();
+      if (bar) bar.remove();
       return;
     }
-    if (btn) return;
-    btn = document.createElement('button');
+    if (bar) return;
+    bar = document.createElement('div');
+    bar.id = 'chat-saver-bar';
+    const cont = document.createElement('button');
+    cont.id = 'chat-saver-cont';
+    cont.type = 'button';
+    cont.textContent = `↗ Continue in ${OTHER_APP.label}`;
+    cont.title = `Open a new ${OTHER_APP.label} chat with a brief of this one (Chat Saver)`;
+    cont.addEventListener('click', () => continueElsewhere(cont));
+    const btn = document.createElement('button');
     btn.id = 'chat-saver-btn';
     btn.type = 'button';
     btn.textContent = '⬇ Save chat';
@@ -291,12 +329,52 @@
         btn.textContent = '⬇ Save chat';
       }
     });
-    document.body.appendChild(btn);
+    bar.append(cont, btn);
+    document.body.appendChild(bar);
+  }
+
+  // ---- Continue a chat from another app ----
+  // The library opens this tab and leaves a brief with the background worker; put it in the message box (never sent).
+
+  function insertIntoComposer(text) {
+    const el = document.querySelector(P.composerSelector);
+    if (!el) return false;
+    el.focus();
+    if (el.tagName === 'TEXTAREA') {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(el, text);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }
+    // Rich editors (ProseMirror) handle a native insertText like typing.
+    if (document.execCommand('insertText', false, text) && el.textContent.trim()) return true;
+    el.textContent = text;
+    el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    return !!el.textContent.trim();
+  }
+
+  async function fillPendingContinue() {
+    let pending;
+    try {
+      pending = await sendToBackground({ type: 'takePendingContinue' });
+    } catch (e) {
+      return;
+    }
+    if (!pending) return;
+    for (let i = 0; i < 40; i++) {
+      if (insertIntoComposer(pending.text)) {
+        toast(`<b>Brief added.</b> Check it, then press send to continue "${escapeHtml(pending.title || 'your chat')}" here.`, 12000);
+        return;
+      }
+      await sleep(500);
+    }
+    toast('<b>Could not find the message box.</b> The brief is on your clipboard: click in the box and paste.', 15000);
   }
 
   // Chat sites are single-page apps, so watch for navigation between chats.
   ensureButton();
   setInterval(ensureButton, 1000);
+  fillPendingContinue();
 
   // Auto-backup: shortly after the page loads, then every few minutes (the background alarm also nudges us).
   setTimeout(() => backupTick(false).catch(() => {}), 15000);

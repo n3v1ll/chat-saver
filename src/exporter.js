@@ -157,7 +157,8 @@
     dir.file('transcript.md', transcript);
     dir.file('conversation.json', JSON.stringify(conv, null, 2));
     dir.file('links.md', C.linksMarkdown(links));
-    dir.file('continue.md', continueBrief || C.continueFallback(conv));
+    const continueText = continueBrief || C.continueFallback(conv);
+    dir.file('continue.md', continueText);
 
     const report = {
       title: conv.title,
@@ -173,7 +174,7 @@
     };
     dir.file('export-report.json', JSON.stringify(report, null, 2));
     written.push('README.md', 'transcript.md', 'conversation.json', 'links.md', 'continue.md', 'export-report.json');
-    return { zip, folder, report, written, files: Object.fromEntries(fileIndex), transcript, summary };
+    return { zip, folder, report, written, files: Object.fromEntries(fileIndex), transcript, summary, continueText };
   }
 
   // Top-level index for a ZIP holding many chats. Rows: reports from exportConversation, or { title, error }.

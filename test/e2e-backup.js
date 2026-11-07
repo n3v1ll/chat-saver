@@ -44,7 +44,7 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
     if (url.pathname === '/backend-api/estuary/content') {
       return route.fulfill({ body: url.searchParams.get('id') === 'file-PDF1' ? BIG : Buffer.from('IMG'), contentType: 'application/octet-stream' });
     }
-    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake chatgpt</body></html>' });
+    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake chatgpt<div id="prompt-textarea" contenteditable="true" class="ProseMirror"></div></body></html>' });
   });
 
   const claudeCalls = [];
@@ -55,7 +55,7 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
     if (url.pathname === '/api/organizations/org-1/chat_conversations') return route.fulfill({ json: [{ uuid: claude.uuid, name: claude.name, updated_at: old(7200) }] });
     if (url.pathname === `/api/organizations/org-1/chat_conversations/${claude.uuid}`) return route.fulfill({ json: claude });
     if (url.pathname.startsWith('/api/org-1/files/')) return route.fulfill({ body: Buffer.from('CLAUDEFILE'), contentType: 'image/png' });
-    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake claude</body></html>' });
+    return route.fulfill({ contentType: 'text/html', body: '<html><head><meta charset="utf-8"></head><body>fake claude<div contenteditable="true" class="ProseMirror"></div></body></html>' });
   });
 
   let [sw] = ctx.serviceWorkers();
@@ -130,6 +130,22 @@ const old = (s) => new Date(Date.now() - s * 1000).toISOString();
     await lib.locator('.result').first().click();
     await lib.screenshot({ path: path.join(process.env.SHOTS, '5-library.png') });
   }
+  // 6. Continue a ChatGPT chat in Claude (button on the chat page), and a Claude chat in ChatGPT (library)
+  const [claudeNew] = await Promise.all([ctx.waitForEvent('page'), gptPage.click('#chat-saver-cont')]);
+  await claudeNew.waitForURL('https://claude.ai/new');
+  await claudeNew.waitForFunction(() => /continuing a previous conversation/.test((document.querySelector('.ProseMirror') || {}).textContent), null, { timeout: 15000 });
+  console.log('continue in Claude: brief filled,', (await claudeNew.locator('.ProseMirror').innerText()).length, 'chars');
+  await lib.bringToFront();
+  const [gptNew] = await Promise.all([ctx.waitForEvent('page'), lib.click('#vContGpt')]);
+  await gptNew.waitForURL('https://chatgpt.com/');
+  await gptNew.waitForFunction(() => /Landing page copy/.test((document.querySelector('#prompt-textarea') || {}).textContent), null, { timeout: 15000 });
+  console.log('continue in ChatGPT from library: brief filled');
+  // A tab the user opens themselves must not receive the brief.
+  const other = await ctx.newPage();
+  await other.goto('https://chatgpt.com/');
+  await other.waitForTimeout(2000);
+  assert.strictEqual(await other.locator('#prompt-textarea').innerText(), '');
+
   await new Promise((r) => setTimeout(r, 4500));
   const index = fs.readFileSync(path.join(backupDir, 'index.md'), 'utf8');
   assert.match(index, /2 chats backed up/);

@@ -41,6 +41,7 @@
   root.ChatSaverProvider = {
     id: 'chatgpt',
     label: 'ChatGPT',
+    composerSelector: '#prompt-textarea, textarea[name="prompt-textarea"]',
     color: '#10a37f',
 
     conversationIdFromUrl() {

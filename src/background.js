@@ -134,6 +134,27 @@ async function backupError(error) {
   return true;
 }
 
+// ---- Continue a chat in another app ----
+// The brief waits in session storage for the tab we open, which picks it up once and fills its message box.
+const NEW_CHAT_URLS = { chatgpt: 'https://chatgpt.com/', claude: 'https://claude.ai/new' };
+
+async function continueIn({ target, text, title }) {
+  const url = NEW_CHAT_URLS[target];
+  if (!url) throw new Error(`Unknown app ${target}`);
+  // Open a blank tab first so the brief is stored before the chat page can ask for it.
+  const tab = await chrome.tabs.create({ url: 'about:blank' });
+  await chrome.storage.session.set({ pendingContinue: { tabId: tab.id, text, title, at: Date.now() } });
+  await chrome.tabs.update(tab.id, { url });
+  return true;
+}
+
+async function takePendingContinue(sender) {
+  const { pendingContinue: p } = await chrome.storage.session.get('pendingContinue');
+  if (!p || !sender.tab || sender.tab.id !== p.tabId || Date.now() - p.at > 2 * 60 * 1000) return null;
+  await chrome.storage.session.remove('pendingContinue');
+  return { text: p.text, title: p.title };
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const run = async () => {
     switch (msg.type) {
@@ -148,6 +169,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'backupRecord': return backupRecord(msg.record);
       case 'backupError': return backupError(msg.error);
       case 'showInFolder': return chrome.downloads.show(msg.downloadId);
+      case 'continueIn': return continueIn(msg);
+      case 'takePendingContinue': return takePendingContinue(sender);
       default: throw new Error(`Unknown message ${msg.type}`);
     }
   };
